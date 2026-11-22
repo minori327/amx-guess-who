@@ -1,0 +1,15 @@
+# Render Blueprint — AMX Guess Who (free plan)
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: amx-guess-who
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    # Render sets PORT automatically; server.js listens on process.env.PORT, 0.0.0.0.
+    # Free services sleep after ~15 min idle and take ~1 min to wake — open the
+    # URL a few minutes before the meeting (see README checklist).

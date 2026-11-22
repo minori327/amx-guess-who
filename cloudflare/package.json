@@ -1,0 +1,1 @@
+{"description":"AMX Guess Who on Cloudflare Workers + Durable Objects (free plan) — port of the Node/Socket.IO version in the parent folder.","devDependencies":{"wrangler":"^4.0.0","ws":"^8.18.0"},"name":"amx-guess-who-cloudflare","private":true,"scripts":{"deploy":"wrangler deploy","dev":"wrangler dev","test:smoke":"node test/smoke.mjs"},"type":"module","version":"1.0.0"}

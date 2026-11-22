@@ -1,0 +1,17 @@
+# AMX Guess Who — Cloudflare Workers + Durable Objects (free plan, no card)
+name = "amx-guess-who"
+main = "src/worker.js"
+compatibility_date = "2025-11-01"
+
+# One Durable Object instance per room code. SQLite-backed classes are the
+# kind the free plan supports.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# No [routes] section: the Worker is published on the default workers.dev
+# subdomain -> https://amx-guess-who.<your-subdomain>.workers.dev

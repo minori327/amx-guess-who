@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMX Guess Who — Join</title>
+<style>
+:root{--green:#00602A;--green2:#00A758;--bright:#41FF93;--ink:#12211A;--muted:#5B6B62;--line:#DFE7E1;--paper:#F7F8F6}
+*{box-sizing:border-box}body{font-family:"Segoe UI",Arial,"Microsoft YaHei",sans-serif;background:var(--paper);color:var(--ink);margin:0;font-size:17px}
+.wrap{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:24px;margin:8px 0 2px}.sub{color:var(--muted);margin:0 0 16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+input,textarea{font:inherit;width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+button{font:inherit;width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer;margin-bottom:8px}
+button.primary{background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
+button:disabled{opacity:.45}
+.namebtn{text-align:left;font-size:18px;padding:16px}
+.namebtn.sel{border-color:var(--green);background:#EAF5EE;font-weight:700}
+.fact{font-size:24px;font-weight:800;line-height:1.3;text-align:center;padding:10px 4px}
+.center{text-align:center}.score{font-size:30px;font-weight:800;color:var(--green)}
+.err{background:#FDECEA;border:1px solid #E5A49E;border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.hidden{display:none!important}.hint{color:var(--muted);font-size:14px}
+li{margin-bottom:6px}
+</style></head><body><div class="wrap">
+<h1>AMX Guess Who 🎭</h1><p class="sub">Join on your phone · guess whose fact it is</p>
+<div id="err" class="err hidden"></div>
+
+<section id="joinView" class="card">
+  <label>Room code<input id="codeInput" maxlength="6" style="text-transform:uppercase" placeholder="e.g. K7QX2"></label>
+  <label>Your name<input id="nameInput" maxlength="30" placeholder="Display name"></label>
+  <button id="joinBtn" class="primary">Join game</button>
+</section>
+
+<section id="factView" class="card hidden">
+  <h2 style="margin-top:0">One surprising fact about you</h2>
+  <p class="hint">Work-safe, true, and hard to guess. Ideas:</p>
+  <ul class="hint">
+    <li>A job you had before marketing…</li>
+    <li>A hidden talent nobody at work has seen…</li>
+    <li>The strangest food you genuinely love…</li>
+    <li>A childhood dream job, or a place you lived that nobody would guess…</li>
+  </ul>
+  <textarea id="factInput" rows="3" maxlength="280" placeholder="e.g. I once performed on stage in front of 2,000 people"></textarea>
+  <button id="factBtn" class="primary">Submit my fact</button>
+  <p id="factStatus" class="hint center"></p>
+</section>
+
+<section id="waitView" class="card hidden center"><p>✅ You're in! Waiting for the host to start…</p><p class="hint">Keep this page open.</p></section>
+
+<section id="playView" class="hidden">
+  <div class="card"><div class="hint center" id="roundLabel"></div><div class="fact" id="factText"></div><p class="hint center" id="playHint">Tap who you think this fact belongs to:</p></div>
+  <div id="guessList"></div>
+  <div class="card center hidden" id="lockedBox">🔒 Guess locked in. Waiting for the reveal…</div>
+  <div class="card center hidden" id="ownFactBox">🤫 This one is YOUR fact — sit back and watch them guess.</div>
+</section>
+
+<section id="revealView" class="card hidden center">
+  <p class="hint" id="revealFact"></p><h2 id="revealName"></h2>
+  <p id="revealMine"></p><p>Your score</p><div class="score" id="myScore">0</div>
+</section>
+
+<section id="endView" class="card hidden center"><h2>🏆 Final results</h2><div id="podium"></div><p>Your final score</p><div class="score" id="finalScore">0</div></section>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let myId = null, state = null, myGuess = null, lastRoundNumber = 0, myOwnRound = 0;
+socket.on('player:ownRound', ({ number }) => { myOwnRound = number; });
+const $ = id => document.getElementById(id);
+const show = (id, on) => $(id).classList.toggle('hidden', !on);
+function err(msg){ if(!msg) return show('err', false); $('err').textContent = msg; show('err', true); }
+socket.on('player:error', err);
+socket.on('host:error', err);
+socket.on('room:ended', () => { err('The host ended this room.'); ['factView','waitView','playView','revealView','endView'].forEach(v=>show(v,false)); show('joinView', true); });
+
+const saved = JSON.parse(localStorage.getItem('gw-player') || 'null');
+if (saved) { $('codeInput').value = saved.code || ''; $('nameInput').value = saved.name || ''; }
+const qsRoom = new URLSearchParams(location.search).get('room');
+if (qsRoom) $('codeInput').value = qsRoom.toUpperCase();
+
+$('joinBtn').onclick = () => {
+  err('');
+  const code = $('codeInput').value.trim().toUpperCase(), name = $('nameInput').value.trim();
+  if (!code || !name) return err('Enter the room code and your name.');
+  localStorage.setItem('gw-player', JSON.stringify({ code, name }));
+  socket.emit('player:join', { code, name });
+};
+socket.on('player:joined', ({ playerId }) => { myId = playerId; show('joinView', false); });
+
+$('factBtn').onclick = () => {
+  const fact = $('factInput').value.trim();
+  if (!fact) return err('Write your fact first.');
+  err(''); socket.emit('player:submitFact', { fact });
+  $('factStatus').textContent = 'Fact submitted — you can resubmit to change it until the game starts.';
+};
+
+socket.on('room:state', (s) => {
+  state = s;
+  if (!myId) return;
+  const me = s.players.find(p => p.id === myId);
+  if (!me) return;
+  if (s.phase === 'lobby') {
+    show('playView', false); show('revealView', false); show('endView', false);
+    show('factView', true); show('waitView', me.hasFact);
+    if (me.hasFact) $('factStatus').textContent = 'Fact submitted ✓ — you can resubmit to change it until the game starts.';
+    return;
+  }
+  show('factView', false); show('waitView', false);
+  if (s.phase === 'playing' || s.phase === 'revealed') {
+    if (s.round.number !== lastRoundNumber) { myGuess = null; lastRoundNumber = s.round.number; }
+    // Owner is hidden publicly pre-reveal; the server privately flags the owner's own round.
+    const mine = s.phase === 'playing' && (myOwnRound === s.round.number || isMyFact(s));
+    if (s.phase === 'playing') {
+      show('revealView', false); show('playView', true);
+      $('roundLabel').textContent = `Round ${s.round.number} / ${s.round.total} · ${s.round.guessesIn} guesses in`;
+      $('factText').textContent = '“' + s.round.fact + '”';
+      show('ownFactBox', mine); show('lockedBox', !mine && Boolean(myGuess));
+      $('playHint').style.display = mine ? 'none' : '';
+      const list = $('guessList'); list.innerHTML = '';
+      if (!mine) s.players.filter(p => p.id !== myId).forEach(p => {
+        const b = document.createElement('button');
+        b.className = 'namebtn' + (myGuess === p.id ? ' sel' : '');
+        b.textContent = p.name; b.disabled = Boolean(myGuess);
+        b.onclick = () => { myGuess = p.id; socket.emit('player:guess', { guessedId: p.id }); };
+        list.appendChild(b);
+      });
+    } else { // revealed
+      show('playView', false); show('revealView', true);
+      $('revealFact').textContent = '“' + s.round.fact + '”';
+      $('revealName').textContent = 'It was ' + s.round.ownerName + '!';
+      $('revealMine').textContent = s.round.ownerId === myId ? '🤫 That was YOUR fact!' + (s.round.fooled ? ' It fooled the whole room!' : '')
+        : myGuess == null ? 'You did not guess this round.'
+        : (s.round.correctNames.includes(me.name) ? '🎉 You guessed right — +100!' : 'Not this time.');
+      $('myScore').textContent = me.score;
+    }
+  }
+  if (s.phase === 'finished') {
+    show('playView', false); show('revealView', false); show('endView', true);
+    $('finalScore').textContent = me.score;
+    $('podium').innerHTML = s.leaderboard.slice(0, 3).map((p, i) => `<p>${['🥇','🥈','🥉'][i]} ${p.name} — ${p.score}</p>`).join('');
+  }
+});
+function isMyFact(s){
+  // The server never reveals the owner pre-reveal; the owner recognises their own fact text.
+  const mine = (JSON.parse(localStorage.getItem('gw-player')||'{}').name||'');
+  const mySubmitted = $('factInput').value.trim();
+  return Boolean(mySubmitted) && s.round.fact === mySubmitted;
+}
+</script></body></html>
